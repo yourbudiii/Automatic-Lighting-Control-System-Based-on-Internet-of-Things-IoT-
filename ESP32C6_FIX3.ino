@@ -11,7 +11,7 @@ char ssid[32];
 char pass[32];
 
 // Konfigurasi MQTT Broker
-const char* mqttServer = "99dea6c09ad3478696b5981a6d4ec886.s1.eu.hivemq.cloud";
+const char* mqttServer = ""; //masukan server sesuai akun cluster pada hivemq.com
 const int mqttPort = 8883;
 const char* mqtt_user = "adminLCS";
 const char* mqtt_pass = "adminLCS123";
