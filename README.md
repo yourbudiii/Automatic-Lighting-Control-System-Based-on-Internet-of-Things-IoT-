@@ -31,5 +31,8 @@ Mengembangkan sistem pencahayaan otomatis yang dapat mendeteksi keberadaan manus
   ## Image
   <img src="https://github.com/user-attachments/assets/143fd83f-7c80-4972-ad05-353ad71f385d" width="350" height="400"/>
   <img src="https://github.com/user-attachments/assets/58999815-4503-4bc3-b494-5b47a3e930c7" width="200" height="400"/>
+  <img src="https://github.com/user-attachments/assets/96f550ff-b2c6-4a45-8abf-108cbb5289ee" width="550" height="400"/>
+
+  
 
 
