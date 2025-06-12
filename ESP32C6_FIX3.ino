@@ -1,285 +1,219 @@
-#define BLYNK_PRINT Serial
-
-//SETTING BLYNK ID, NAME, AUTH_TOKEN
-#define BLYNK_TEMPLATE_ID "TMPL6hvp_w4FR"
-#define BLYNK_TEMPLATE_NAME "LIGHTING CONTROL SYSTEM"
-#define BLYNK_AUTH_TOKEN "mPlKoW6uDMjuWYEXRi6pTbTSaAoHZjOu"
-
 #include <WiFi.h>
-#include <BlynkSimpleEsp32.h>
+#include <PubSubClient.h>
+#include <WiFiManager.h>
+#include <WiFiClientSecure.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <ThingSpeak.h>
-#include <WiFiManager.h>
 
-//------------------------------------
-//SETTING WIFI
-//------------------------------------
-// WiFiManager wifiManager;  //Menggunakan wifi manager
-char ssid[32];            // Variabel untuk menyimpan SSID
-char pass[32];            // Variabel untuk menyimpan password WiFi
+// Konfigurasi WiFi via WiFi Manager
+WiFiManager wifiManager;
+char ssid[32];
+char pass[32];
 
-//----------------------------------------------- ------
-//KONFIGURASI THINGSPEAK PLATFORM FOR ENERGY MONITORING
-//-----------------------------------------------------
-const unsigned long channelID = 2787446;       // Ganti dengan Channel ID Anda
-const char* writeAPIKey = "OIEQOPWHPMDPER1L";  // Ganti dengan Write API Key Anda
-const char* server = "api.thingspeak.com";
+// Konfigurasi MQTT Broker
+const char* mqttServer = "99dea6c09ad3478696b5981a6d4ec886.s1.eu.hivemq.cloud";
+const int mqttPort = 8883;
+const char* mqtt_user = "adminLCS";
+const char* mqtt_pass = "adminLCS123";
+const char* mqttClientID = "LCS_relay_client";
+const char* mqttControlTopic = "LCS/relayLCS/control";
+const char* mqttModeTopic = "LCS/relayLCS/mode/command";
+const char* mqttSensorPMTopic = "LCS/sensorLCS/PM/";
+const char* mqttRelayTopic = "LCS/relayLCS/status/";
 
-//------------------------------------
-//------------------------------------
-BlynkTimer timer;                    //Pengiriman ke Blynk 100ms
-
-// NTP Client
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 25200, 60000);  // Waktu WIB (GMT+7, offset 25200 detik)
-
-// Inisialisasi WiFi dan ThingSpeak
-WiFiClient client;
-WiFiManager wifiManager;  //Menggunakan WiFi manager
-
-//------------------------------------------------
-// Menggunakan Pin TX RX untuk komunikasi dengan MEGA
-//-------------------------------------------------
-HardwareSerial SerialMega(1);   //ESP32-C6 PIN RX (4) DAN TX (5)
-#define ESP32_RX 4             //Pin LP_RX
-#define ESP32_TX 5             //Pin LP_TX
-
-bool isAutoMode = true;  // Menyimpan status mode, default Auto
-bool isNoonExecuted = false; // Variabel untuk melacak status pengiriman perintah
+bool isAutoMode = true;
+bool isNoonExecuted = false;
 bool isAfternoonExecuted = false;
 bool isEveningExecuted = false;
 bool isMorningExecuted = false;
 
-// Virtual pins untuk relay
-int relayOutputPins[] = {V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19}; 
-int lastRelayState[20] = {0};  // Inisialisasi semua relay dalam kondisi OFF
+// Variabel global untuk flag
+String mode = "AUTO";  // Mode default
 
-//------------------------------------
-//FUNGSI UTAMA
-//------------------------------------
+//-----------------------------------------------
+// Inisialisasi WiFi dan MQTT
+WiFiClientSecure espClient;
+PubSubClient client(espClient);
+
+// NTP Client
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 25200, 60000);  // GMT+7
+
+// Relay
+#define NUM_RELAYS 20
+int relayStates[NUM_RELAYS];
+
+HardwareSerial SerialMega(1);
+#define ESP32_RX 16
+#define ESP32_TX 17
+
 void setup() {
-  Serial.begin(115200);                                    // Inisialisasi komunikasi serial untuk monitor
-  SerialMega.begin(9600, SERIAL_8N1, ESP32_RX, ESP32_TX);  // Menginisialisasi pin RX dan TX to Mega
+  Serial.begin(9600);
+  SerialMega.begin(9600, SERIAL_8N1, ESP32_RX, ESP32_TX);
 
-  //-------------------------------------
-  //SETTING WIFI MENGGUNAKAN WIFI MANAGER
-  //-------------------------------------
-  Serial.println("Lighting Control System");
-  Serial.println("Configuring WiFi");
+  connectWiFiManager();
+  espClient.setInsecure();
 
-  // // Uncomment baris berikut jika ingin menghapus kredensial WiFi yang disimpan sebelumnya
-  wifiManager.resetSettings();
+  client.setServer(mqttServer, mqttPort);
+  client.setCallback(mqttCallback);
+  connectMQTT();
 
-  // Memulai portal konfigurasi WiFi
-  if (!wifiManager.autoConnect("Lighting Control-AP", "password123")) {
-    Serial.println("Gagal menghubungkan ke WiFi");
-    ESP.restart();  // Restart ESP32 jika gagal
-  }
-
-  // Jika berhasil terhubung ke WiFi, dapatkan SSID dan password yang digunakan Blynk
-  strcpy(ssid, WiFi.SSID().c_str());  // Menyalin SSID yang terhubung ke variabel ssid
-  strcpy(pass, WiFi.psk().c_str());   // Menyalin password yang digunakan ke variabel pass
-
-  // Jika berhasil terhubung ke WiFi
-  Serial.println("WiFi Tersambung!");
-  Serial.print("SSID :");
-  Serial.println(ssid);
-  Serial.print("IP : ");
-  Serial.println(WiFi.localIP());
-  Serial.print("Hostname: ");
-  Serial.println(WiFi.getHostname());
-
-  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass, "blynk.cloud", 8080); // Menghubungkan ESP32 ke Blynk
-
-  // Mengirimkan status mode Auto saat pertama kali
-  Blynk.virtualWrite(V0, isAutoMode ? 1 : 0); 
-  timer.setInterval(500L, sendCommandToMega); // Menjadwalkan pengiriman status mode ke Arduino setiap 500ms
-  Serial.println("Mode Auto");
-  
-  timeClient.begin();       // Inisialisasi NTP Client
-  ThingSpeak.begin(client); // Inisialisasi ThingSpeak
+  timeClient.begin();
 }
 
 void loop() {
-  Blynk.run();                  // Menjalankan Blynk untuk memperbarui status dari aplikasi
-  timer.run();                  // Menjalankan timer untuk mengirimkan status ke Arduino
+  if (!client.connected()) {
+    connectMQTT();
+  }
   timeClient.update();
+  sendStatusRelayDataSensor();
+  client.loop();
   ConfigWiFi();
-  sendDataToBlynkThingspeak();  // Periksa status relay dari Arduino Mega dan kirim ke Blynk
 
   // Jadwal pengaturan waktu
-  handleSchedule(7 , 0, isMorningExecuted, "WAKTU_KERJA");               //Waktu kerja menandakan pukul 07.00
-  handleSchedule(12, 0, isNoonExecuted, "WAKTU_ISTIRAHAT_MULAI");         //Waktu istirahat menandakan pukul 12.00
-  handleSchedule(13, 0, isAfternoonExecuted, "WAKTU_ISTIRAHAT_SELESAI");  //Waktu istirahat selesai menandakan pukul 13.00
-  handleSchedule(17, 0, isEveningExecuted, "WAKTU_PULANG");               //Waktu pulang menandakan pukul 17.00
+  //handleSchedule(17, 0, isMorningExecuted, "WAKTU_KERJA");                //Waktu kerja menandakan pukul 07.00
+  //handleSchedule(7, 41, isNoonExecuted, "WAKTU_ISTIRAHAT_MULAI");         //Waktu istirahat menandakan pukul 12.00
+  //handleSchedule(7, 45, isAfternoonExecuted, "WAKTU_ISTIRAHAT_SELESAI");  //Waktu istirahat selesai menandakan pukul 13.00
+  //handleSchedule(6 , 0, isEveningExecuted, "WAKTU_PULANG");               //Waktu pulang menandakan pukul 17.00
 }
 
 void handleSchedule(int targetHour, int targetMinute, bool &flag, const String &command) {
   if (timeClient.getHours() == targetHour && timeClient.getMinutes() == targetMinute && !flag) {
-    for (int i = 0; i < 3; i++) {  // Kirim 3 kali untuk memastikan keterbacaan di Arduino Mega
+    for (int i = 0; i < 3; i++) {
       SerialMega.println(command);
-      Serial.println("Command sent: " + command + " at " + timeClient.getFormattedTime() + " (Attempt " + String(i + 1) + ")");
-      delay(500);  // Delay untuk memastikan Mega bisa membaca data dengan stabil
+      delay(500);
     }
-    flag = true;  // Set flag agar tidak mengirim ulang dalam menit yang sama
+    flag = true;
   }
-
-  // Reset flag saat jam berganti
   if (timeClient.getMinutes() != targetMinute) {
     flag = false;
   }
 }
 
-//------------------------------------
-//FUNGSI KIRIM KE ARDUINO MEGA
-//------------------------------------
-//Kirim ke Mega menggunakan serial UART
-void sendCommandToMega() {
-  if (isAutoMode) {
-    SerialMega.println("AUTO");  // Mengirim status Auto ke Arduino Mega
-  } else {
-    SerialMega.println("MANUAL");  // Mengirim status Manual ke Arduino Mega
+void connectWiFiManager() {
+  Serial.println("Configuring WiFi");
+  if (!wifiManager.autoConnect("Lighting Control-AP", "password123")) {
+    ESP.restart();
+  }
+  strcpy(ssid, WiFi.SSID().c_str());
+  strcpy(pass, WiFi.psk().c_str());
+
+  Serial.println("WiFi Tersambung!");
+  Serial.print("SSID : ");
+  Serial.println(ssid);
+  Serial.print("IP : ");
+  Serial.println(WiFi.localIP());
+}
+
+void connectMQTT() {
+  int retryCount = 0;
+  while (!client.connected() && retryCount < 10) {
+    Serial.println("Menghubungkan ke MQTT...");
+    if (client.connect(mqttClientID, mqtt_user, mqtt_pass)) {
+      Serial.println("Terhubung ke MQTT Broker!");
+      client.subscribe(mqttControlTopic);
+      client.subscribe(mqttModeTopic);
+      return;
+    } else {
+      Serial.println("Gagal terhubung. Mencoba lagi...");
+      delay(2000);
+      retryCount++;
+    }
+  }
+  if (!client.connected()) {
+    ESP.restart();
   }
 }
 
-//------------------------------------
-//FUNGSI UPDATE STATUS BLYNK
-//------------------------------------
-// Kirim status relay ke Virtual Pin i di Blynk
-void sendDataToBlynkThingspeak() {
-  // Periksa apakah ada data dari Arduino Mega
-  if (SerialMega.available() > 0) {
-    String data = SerialMega.readStringUntil('\n');   // Baca data sampai newline
-    data.trim();                                      // Hapus karakter tak perlu
-    Serial.println("Data diterima: " + data);         // Debugging
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String message;
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
 
-    // Proses data relay
-    if (data.startsWith("RELAY_")) {
-      int relayIndex = data.substring(6, data.indexOf(':')).toInt();  // Ambil nomor relay
-      int relayState = data.substring(data.indexOf(':') + 1).toInt(); // Ambil status relay
+  if (String(topic) == mqttModeTopic) {
+    if (message == "AUTO" || message == "MANUAL") {
+      mode = message;
 
-      // Pastikan index valid dan hanya update jika status relay berubah
-      if (relayIndex >= 0 && relayIndex < 20 && relayState != lastRelayState[relayIndex]) {
-        int virtualPin = relayOutputPins[relayIndex];   // Ambil virtual pin yang sesuai
-        Blynk.virtualWrite(virtualPin, relayState);     // Kirim status relay ke Virtual Pin
-        lastRelayState[relayIndex] = relayState;        // Simpan status terakhir relay
-        Serial.print("Update Blynk: RELAY_");
-        Serial.print(relayIndex);
-        Serial.print(" -> ");
-        Serial.println(relayState);
+      SerialMega.println(mode);
+      Serial.println("Mode diubah menjadi: " + mode);
+    }
+  }
+
+  else if (String(topic) == mqttControlTopic) {
+    if (message.startsWith("RELAY_")) {
+      int colonIndex = message.indexOf(':');
+      if (colonIndex != -1) {
+        String relayInfo = message.substring(0, colonIndex);
+        String relayAction = message.substring(colonIndex + 1);
+        int relayIndex = relayInfo.substring(6).toInt();
+        if (relayIndex >= 0 && relayIndex < NUM_RELAYS) {
+          relayStates[relayIndex] = (relayAction == "ON") ? HIGH : LOW;
+          sendRelayStatus(relayIndex);
+        }
       }
     }
-    
-    // Proses data power meter
-    else if (data.startsWith("DATA:")) {
-      sendDataToThingSpeak(data);  // Kirim data ke ThingSpeak
+  }
+}
+
+void sendRelayStatus(int relayIndex) {
+  String relayMessage = "RELAY_" + String(relayIndex) + ":" + (relayStates[relayIndex] == HIGH ? "1" : "0");
+  SerialMega.println(relayMessage);
+}
+
+void sendStatusRelayDataSensor() {
+  if (SerialMega.available() > 0) {
+    String data = SerialMega.readStringUntil('\n');
+    Serial.println("Data diterima: " + data);
+
+    if (data.startsWith("RELAY_") && data.indexOf(':') != -1) {
+      int colonIndex = data.indexOf(':');
+      String relayInfo = data.substring(0, colonIndex);
+      String relayStatus = data.substring(colonIndex + 1);
+      if (relayInfo.startsWith("RELAY_")) {
+        int relayIndex = relayInfo.substring(6).toInt();
+        if (relayIndex >= 0 && relayIndex <= 19) {
+          String mqttStatus = (relayStatus == "1") ? "ON" : "OFF";
+          String topic = String(mqttRelayTopic) + relayIndex;
+          client.publish(topic.c_str(), mqttStatus.c_str());
+        }
+      }
+    }
+
+    if (data.startsWith("DATA:")) {
+      float voltage = extractValue(data, 'V');
+      float current = extractValue(data, 'C');
+      float power = extractValue(data, 'P');
+      float energy = extractValue(data, 'E');
+      float frequency = extractValue(data, 'F');
+      float powerfactor = extractValue(data, 'Q');
+
+      client.publish((String(mqttSensorPMTopic) + "voltage").c_str(), String(voltage).c_str());
+      client.publish((String(mqttSensorPMTopic) + "current").c_str(), String(current).c_str());
+      client.publish((String(mqttSensorPMTopic) + "power").c_str(), String(power).c_str());
+      client.publish((String(mqttSensorPMTopic) + "energy").c_str(), String(energy).c_str());
+      client.publish((String(mqttSensorPMTopic) + "frequency").c_str(), String(frequency).c_str());
+      client.publish((String(mqttSensorPMTopic) + "powerfactor").c_str(), String(powerfactor).c_str());
     }
   }
 }
 
-//------------------------------------
-//KIRIM DATA POWER METER KE THINGSPEAK
-//------------------------------------
-void sendDataToThingSpeak(String data) {
-  // Validasi format data Power Meter
-  if (!data.startsWith("DATA:")) {
-    Serial.println("Invalid data power meter format, skipping...");
-    return;  // Abaikan data jika format tidak sesuai
-  }
-
-  // Parsing data berdasarkan format
-  float voltage = extractValue(data, 'V');
-  float current = extractValue(data, 'C');
-  float power = extractValue(data, 'P');
-  float energy = extractValue(data, 'E');
-  float frequency = extractValue(data, 'F');
-
-  // Menampilkan data untuk debugging
-  Serial.println("Sending to ThingSpeak:");
-  Serial.println("Voltage       : " + String(voltage) + " V");
-  Serial.println("Current       : " + String(current) + " A");
-  Serial.println("Power         : " + String(power) + " W");
-  Serial.println("Energy        : " + String(energy) + " kWh");
-  Serial.println("Frequency     : " + String(frequency) + " Hz");
-  
-  // Kirim data ke ThingSpeak
-  ThingSpeak.setField(1, voltage);
-  ThingSpeak.setField(2, current);
-  ThingSpeak.setField(3, power);
-  ThingSpeak.setField(4, energy);
-  ThingSpeak.setField(5, frequency);
-
-  int response = ThingSpeak.writeFields(channelID, writeAPIKey);
-  if (response == 200) {
-    Serial.println("Data sent to ThingSpeak successfully");
-  } else {
-    Serial.println("Error sending data to ThingSpeak: " + String(response));
-  }
-}
-
-// Fungsi untuk mengekstrak nilai berdasarkan parameter
 float extractValue(String data, char parameter) {
-  int startIndex = data.indexOf(parameter + String(':'));  // Cari parameter (contoh: "V:")
-  if (startIndex == -1) return 0;                          // Jika parameter tidak ditemukan, kembalikan 0
-  startIndex += 2;                                         // Lewati "X:" (contoh: "V:")
-  int endIndex = data.indexOf(',', startIndex);            // Cari delimiter berikutnya (koma)
-  if (endIndex == -1) endIndex = data.length();            // Jika tidak ada koma, ambil sampai akhir string
-  return data.substring(startIndex, endIndex).toFloat();   // Ambil nilai sebagai float
+  int startIndex = data.indexOf(parameter + String(':'));
+  if (startIndex == -1) return 0;
+  startIndex += 2;
+  int endIndex = data.indexOf(',', startIndex);
+  if (endIndex == -1) endIndex = data.length();
+  return data.substring(startIndex, endIndex).toFloat();
 }
 
-//--------------------------------------------------------------------
-//FUNGSI UNTUK KONFIGURASI WIFI (SEND : OPEN_CONFIG IN SERIAL MONITOR)
-//--------------------------------------------------------------------
 void ConfigWiFi() {
-  // Periksa perintah dari Serial Monitor untuk membuka portal konfigurasi
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-
-    // Perintah untuk membuka portal konfigurasi WiFi
     if (command.equalsIgnoreCase("OPEN_CONFIG")) {
-
-      // Mulai portal konfigurasi di IP yang terhubung sebelumnya
       wifiManager.startConfigPortal("Lighting Control-AP", "password123");
-
-      // Setelah keluar dari portal, restart perangkat
       ESP.restart();
     }
-  }
-}
-
-//------------------------------------
-//INISIALISASI PIN VIRTUAL BLYNK
-//------------------------------------
-// Fungsi ini menangani perintah yang datang dari aplikasi Blynk (Virtual Pin V0 untuk mode)
-BLYNK_WRITE(V0) {                                       // Virtual Pin V0 digunakan untuk mengubah mode
-  int mode = param.asInt();                             // Mendapatkan nilai mode dari aplikasi Blynk
-  isAutoMode = (mode == 1);                             // Jika mode = 1, maka mode Auto; jika 0, maka mode Manual
-  SerialMega.println(isAutoMode ? "Mode Auto" : "Mode Manual");
-  SerialMega.println(isAutoMode ? "AUTO" : "MANUAL");  // Mengirimkan mode ke Arduino Mega
-  Serial.print("MODE :");                              // Mode
-  Serial.println(mode);
-}
-
-BLYNK_WRITE_DEFAULT() {
-  int pin = request.pin;        // Mendapatkan nomor Virtual Pin yang dikontrol
-  int value = param.asInt();    // Membaca nilai (0 atau 1)
-
-  // Pastikan hanya dapat dieksekusi jika mode MANUAL
-  if (!isAutoMode) {  
-    if (pin >= V1 && pin <= V19) {      // Pastikan pin sesuai dengan relay yang ada
-      int relayIndex = pin - V1;        // Hitung indeks relay berdasarkan Virtual Pin
-      SerialMega.print("RELAY_");
-      SerialMega.print(relayIndex);
-      SerialMega.print(":");
-      SerialMega.println(value);
-      Serial.print("Mengirim ke Mega: RELAY_");
-      Serial.print(relayIndex);
-      Serial.print(":");
-      Serial.println(value);
-    }
-  } else {
-    Serial.println("Perintah relay diabaikan karena mode AUTO aktif.");
   }
 }
