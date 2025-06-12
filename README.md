@@ -29,6 +29,7 @@ Mengembangkan sistem pencahayaan otomatis yang dapat mendeteksi keberadaan manus
 - Dashboard web real-time menggunakan React.js dan MQTT.js
 
   ## Image
-  ![image](https://github.com/user-attachments/assets/143fd83f-7c80-4972-ad05-353ad71f385d) ![WhatsApp Image 2025-06-12 at 13 02 31_92787c4e](https://github.com/user-attachments/assets/58999815-4503-4bc3-b494-5b47a3e930c7)
+  <img src="https://github.com/user-attachments/assets/143fd83f-7c80-4972-ad05-353ad71f385d" width="350" height="400"/>
+  <img src="https://github.com/user-attachments/assets/58999815-4503-4bc3-b494-5b47a3e930c7" width="200" height="400"/>
 
 
