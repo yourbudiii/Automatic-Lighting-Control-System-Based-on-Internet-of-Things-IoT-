@@ -1,6 +1,6 @@
 # 🔆 Lighting Control System Berbasis IoT
 
-Sistem pengendalian pencahayaan otomatis berbasis Internet of Things (IoT) menggunakan ESP32-C6 dan Arduino Mega 2560 R3 dengan sensor gerak microwave. Sistem ini dirancang untuk meningkatkan efisiensi energi di lingkungan rumah, kantor atau bahkan industri dengan kontrol otomatis dan pemantauan jarak jauh.
+Sistem pengendalian pencahayaan otomatis berbasis Internet of Things (IoT) menggunakan ESP32 dan Arduino Mega 2560 R3 dengan sensor gerak microwave. Sistem ini dirancang untuk meningkatkan efisiensi energi di lingkungan rumah, khusunya saya membuat prototipe di kamar saya sendiri untuk kontrol lampu dan monitoring energi listrik di beberapa perangkat elektronik.
 
 ## 🎯 Tujuan Proyek
 
@@ -13,8 +13,6 @@ Mengembangkan sistem pencahayaan otomatis yang dapat mendeteksi keberadaan manus
 | **ESP32** | Mikrokontroler Kendali IoT |
 | **Arduino Mega 2560 R3** | Mikrokontroler Kendali Sensor dan Relay |
 | **Sensor Gerak Microwave** | Deteksi keberadaan manusia |
-| **Blynk** | Aplikasi kontrol dan monitoring jarak jauh |
-| **ThingSpeak** | Platform untuk monitoring data energi |
 | **MQTT** | Protokol komunikasi ringan antara perangkat dan server |
 | **React.js + MQTT.js** | Dashboard web real-time untuk kontrol & visualisasi |
 
