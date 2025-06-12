@@ -27,3 +27,9 @@ Mengembangkan sistem pencahayaan otomatis yang dapat mendeteksi keberadaan manus
 - Kontrol manual dan otomatis via aplikasi Blynk
 - Monitoring data energi secara real-time melalui ThingSpeak
 - Dashboard web real-time menggunakan React.js dan MQTT.js
+
+## Image
+  <img src="https://github.com/user-attachments/assets/8cbf1d1c-2f83-4ac7-823c-011c7763b3a4" width="400" height="auto"/>
+  <img src="https://github.com/user-attachments/assets/089bd112-848e-442c-b40f-1d958e234cf8" width="400" height="auto"/>
+
+
