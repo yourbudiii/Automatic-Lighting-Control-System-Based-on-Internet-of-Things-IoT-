@@ -15,9 +15,6 @@ Mengembangkan sistem pencahayaan otomatis yang dapat mendeteksi keberadaan manus
 | **Sensor Gerak Microwave** | Deteksi keberadaan manusia |
 | **Blynk** | Aplikasi kontrol dan monitoring jarak jauh |
 | **ThingSpeak** | Platform untuk monitoring data energi |
-| **MQTT** | Protokol komunikasi ringan antara perangkat dan server |
-| **React.js + MQTT.js** | Dashboard web real-time untuk kontrol & visualisasi |
-
 
 ## 🚀 Fitur Utama
 
